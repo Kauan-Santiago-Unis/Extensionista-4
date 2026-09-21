@@ -1,0 +1,17 @@
+[
+  {
+    "Name": "FullStack",
+    "Projects": [
+      {
+        "Path": "src\\Aplicativo.Api\\Aplicativo.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "IIS Express"
+      },
+      {
+        "Path": "src\\Aplicativo.Mobile\\Aplicativo.Mobile.csproj",
+        "Action": "Start",
+        "DebugTarget": "Medium Phone API 36.0 (Android 16.0 – API 36)"
+      }
+    ]
+  }
+]
