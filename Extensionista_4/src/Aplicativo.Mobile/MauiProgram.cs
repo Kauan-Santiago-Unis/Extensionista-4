@@ -15,6 +15,8 @@ namespace Aplicativo.Mobile
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
+            builder.Services.AddSingleton<GoogleAuthService>();
+
 #if DEBUG
     		builder.Logging.AddDebug();
 #endif
