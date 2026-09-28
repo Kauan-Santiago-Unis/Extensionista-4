@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 
+using Aplicativo.Mobile.Data.Local;
+
 namespace Aplicativo.Mobile
 {
     public static class MauiProgram
@@ -16,6 +18,7 @@ namespace Aplicativo.Mobile
                 });
 
             builder.Services.AddSingleton<GoogleAuthService>();
+            builder.Services.AddSingleton<LocalDatabase>();
 
 #if DEBUG
     		builder.Logging.AddDebug();

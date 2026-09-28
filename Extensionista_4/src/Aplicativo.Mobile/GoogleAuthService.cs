@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,11 +11,19 @@ namespace Aplicativo.Mobile;
 public sealed class GoogleAuthService
 {
     private const string GoogleServerClientId = "296628721462-s3n3ntl7haeu01h53m5f0m2mn2bo3ajm.apps.googleusercontent.com";
+    private const string GoogleDesktopClientId = "296628721462-mjapqe6j3mqgilhqg7hi77p4p3jk3eij.apps.googleusercontent.com";
+
+    // O Google exige este valor na troca manual do authorization code pelo token.
+    // Não compartilhe este segredo; mantenha-o apenas no ambiente local.
+    private const string GoogleDesktopClientSecret = "COLOQUE_AQUI_O_CLIENT_SECRET_DESKTOP";
     private const string ApiBaseUrl =
 #if ANDROID
         // O perfil FullStack usa o IIS Express em https://localhost:44380.
         // Dentro do emulador Android, o computador host é acessado por 10.0.2.2.
         "https://10.0.2.2:44380";
+#elif WINDOWS
+        // O perfil FullStack executa a API localmente no IIS Express.
+        "https://localhost:44380";
 #else
         "https://localhost:7240";
 #endif
@@ -21,6 +31,8 @@ public sealed class GoogleAuthService
     private const string GoogleClientId =
 #if IOS || MACCATALYST
         "COLOQUE_AQUI_O_CLIENT_ID_IOS.apps.googleusercontent.com";
+#elif WINDOWS
+        GoogleDesktopClientId;
 #else
         GoogleServerClientId;
 #endif
@@ -66,10 +78,119 @@ public sealed class GoogleAuthService
     {
 #if ANDROID
         return await AndroidGoogleCredentialManager.GetIdTokenAsync(GoogleServerClientId, cancellationToken);
+#elif WINDOWS
+        return await GetGoogleIdTokenWithLoopbackAsync(cancellationToken);
 #else
         return await GetGoogleIdTokenWithWebAuthenticatorAsync(cancellationToken);
 #endif
     }
+
+#if WINDOWS
+    private static async Task<GoogleIdTokenResult> GetGoogleIdTokenWithLoopbackAsync(CancellationToken cancellationToken)
+    {
+        EnsureDesktopClientConfigured();
+
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+
+        var endpoint = (IPEndPoint)listener.LocalEndpoint;
+        var redirectUri = $"http://127.0.0.1:{endpoint.Port}/oauth2redirect/";
+        var state = CreateRandomValue(32);
+        var codeVerifier = CreateRandomValue(64);
+        var nonce = CreateRandomValue(32);
+        var query = new Dictionary<string, string>
+        {
+            ["client_id"] = GoogleClientId,
+            ["redirect_uri"] = redirectUri,
+            ["response_type"] = "code",
+            ["scope"] = "openid email profile",
+            ["access_type"] = "offline",
+            ["prompt"] = "select_account",
+            ["state"] = state,
+            ["nonce"] = nonce,
+            ["code_challenge"] = CreateCodeChallenge(codeVerifier),
+            ["code_challenge_method"] = "S256"
+        };
+
+        using var cancellationRegistration = cancellationToken.Register(() => listener.Stop());
+        var browserOpened = await Browser.Default.OpenAsync(
+            new Uri($"{AuthEndpoint}?{ToQueryString(query)}"),
+            BrowserLaunchMode.SystemPreferred);
+
+        if (!browserOpened)
+            throw new InvalidOperationException("Não foi possível abrir o navegador padrão para o login Google.");
+
+        using var client = await listener.AcceptTcpClientAsync(cancellationToken);
+        var callback = await ReadLoopbackCallbackAsync(client, cancellationToken);
+
+        if (callback.TryGetValue("error", out var googleError))
+            throw new InvalidOperationException($"O Google recusou o login: {googleError}.");
+
+        if (!callback.TryGetValue("state", out var returnedState) || returnedState != state)
+            throw new InvalidOperationException("O estado do OAuth2 não confere.");
+
+        if (!callback.TryGetValue("code", out var code))
+            throw new InvalidOperationException("O Google não retornou um authorization code.");
+
+        using var response = await new HttpClient().PostAsync(TokenEndpoint, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["code"] = code,
+            ["client_id"] = GoogleClientId,
+            ["client_secret"] = GoogleDesktopClientSecret,
+            ["redirect_uri"] = redirectUri,
+            ["grant_type"] = "authorization_code",
+            ["code_verifier"] = codeVerifier
+        }), cancellationToken);
+
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"O Google não trocou o authorization code ({(int)response.StatusCode}): {responseBody}");
+
+        var tokenResponse = JsonSerializer.Deserialize<GoogleTokenResponse>(responseBody);
+        return tokenResponse?.IdToken is { Length: > 0 }
+            ? new GoogleIdTokenResult(tokenResponse.IdToken, nonce)
+            : throw new InvalidOperationException("O Google não retornou id_token.");
+    }
+
+    private static async Task<Dictionary<string, string>> ReadLoopbackCallbackAsync(TcpClient client, CancellationToken cancellationToken)
+    {
+        await using var stream = client.GetStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8, leaveOpen: true);
+        var requestLine = await reader.ReadLineAsync(cancellationToken)
+            ?? throw new InvalidOperationException("O retorno OAuth2 do Google veio vazio.");
+
+        while (!string.IsNullOrEmpty(await reader.ReadLineAsync(cancellationToken)))
+        {
+        }
+
+        var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            throw new InvalidOperationException("O retorno OAuth2 do Google possui formato inválido.");
+
+        var query = ParseQueryString(parts[1]);
+        var html = "<html><head><meta charset='utf-8'><title>LogTrack</title></head>" +
+                   "<body><h2>Login concluído</h2><p>Você pode voltar ao LogTrack.</p></body></html>";
+        var body = Encoding.UTF8.GetBytes(html);
+        var headers = Encoding.ASCII.GetBytes(
+            $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+        await stream.WriteAsync(headers, cancellationToken);
+        await stream.WriteAsync(body, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+        return query;
+    }
+
+    private static Dictionary<string, string> ParseQueryString(string requestTarget)
+    {
+        var query = requestTarget.Contains('?') ? requestTarget[(requestTarget.IndexOf('?') + 1)..] : string.Empty;
+        return query.Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .Where(pair => pair.Length == 2)
+            .ToDictionary(
+                pair => Uri.UnescapeDataString(pair[0]),
+                pair => Uri.UnescapeDataString(pair[1].Replace('+', ' ')),
+                StringComparer.Ordinal);
+    }
+#endif
 
 #if !ANDROID
     private static async Task<GoogleIdTokenResult> GetGoogleIdTokenWithWebAuthenticatorAsync(CancellationToken cancellationToken)
@@ -105,6 +226,15 @@ public sealed class GoogleAuthService
     private static string ToQueryString(Dictionary<string, string> values) => string.Join("&", values.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
     private static void EnsureConfigured() { if (GoogleServerClientId.StartsWith("COLOQUE_AQUI", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Configure o Client ID Web no GoogleAuthService."); }
 
+    private static void EnsureDesktopClientConfigured()
+    {
+        if (GoogleDesktopClientId.StartsWith("COLOQUE_AQUI", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Configure o Client ID OAuth do tipo Aplicativo para computador no GoogleAuthService.");
+        if (string.IsNullOrWhiteSpace(GoogleDesktopClientSecret) ||
+            GoogleDesktopClientSecret.StartsWith("COLOQUE_AQUI", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Configure o Client Secret OAuth do tipo Aplicativo para computador no GoogleAuthService.");
+    }
+
     private static HttpClient CreateHttpClient()
     {
 #if ANDROID && DEBUG
@@ -115,6 +245,15 @@ public sealed class GoogleAuthService
         {
             ServerCertificateCustomValidationCallback = (request, _, _, _) =>
                 request?.RequestUri?.Host == "10.0.2.2"
+        };
+        return new HttpClient(handler);
+#elif WINDOWS && DEBUG
+        // O certificado de desenvolvimento do IIS Express é local e só deve
+        // ser aceito para o host local durante os testes de desenvolvimento.
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (request, _, _, _) =>
+                request?.RequestUri?.Host == "localhost"
         };
         return new HttpClient(handler);
 #else
