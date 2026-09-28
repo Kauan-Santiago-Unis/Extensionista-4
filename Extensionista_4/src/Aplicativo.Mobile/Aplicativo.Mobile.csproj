@@ -28,7 +28,7 @@
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<!-- Display name -->
-		<ApplicationTitle>Aplicativo.Mobile</ApplicationTitle>
+		<ApplicationTitle>LogTrack</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.companyname.aplicativo.mobile</ApplicationId>
@@ -72,6 +72,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Aplicativo.Core\Aplicativo.Core.csproj" />
+	  <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">

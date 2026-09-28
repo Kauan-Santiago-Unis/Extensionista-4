@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../AGENTS.md" />
+    <File Path="../README.md" />
+  </Folder>
   <Project Path="src/Aplicativo.Api/Aplicativo.Api.csproj" />
   <Project Path="src/Aplicativo.Core/Aplicativo.Core.csproj" />
   <Project Path="src/Aplicativo.Mobile/Aplicativo.Mobile.csproj" />
