@@ -1,32 +1,15 @@
 using SQLite;
-
 namespace Aplicativo.Mobile.Data.Local;
 
-/// <summary>
-/// Outbox local para alterações feitas sem conexão.
-/// O processamento da fila será implementado pelo serviço de sincronização.
-/// </summary>
-[Table("__pending_sync_operations")]
+[Table("PendingSyncOperations")]
 public sealed class PendingSyncOperation
 {
-    [PrimaryKey, AutoIncrement]
-    public int Id { get; set; }
-
-    public string EntityName { get; set; } = string.Empty;
-
-    public string EntityId { get; set; } = string.Empty;
-
-    public string Operation { get; set; } = string.Empty;
-
-    public string PayloadJson { get; set; } = string.Empty;
-
-    public string Status { get; set; } = "Pending";
-
+    [PrimaryKey] public string Id { get; set; } = Guid.NewGuid().ToString();
+    [Indexed] public string Scope { get; set; } = "demo";
+    public string Kind { get; set; } = "";
+    public string Payload { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public int Attempts { get; set; }
-
-    public DateTime CreatedAtUtc { get; set; }
-
-    public DateTime? LastAttemptAtUtc { get; set; }
-
+    public DateTime NextAttemptUtc { get; set; } = DateTime.UtcNow;
     public string? LastError { get; set; }
 }

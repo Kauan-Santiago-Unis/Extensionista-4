@@ -1,69 +1,58 @@
 using SQLite;
-
 namespace Aplicativo.Mobile.Data.Local;
 
-/// <summary>
-/// Ponto único de acesso ao banco local do aplicativo.
-/// A conexão é criada em FileSystem.AppDataDirectory e as tabelas de
-/// infraestrutura são criadas na primeira utilização.
-/// </summary>
-public sealed class LocalDatabase
+public sealed class LocalDatabase(string databasePath)
 {
-    public const string DatabaseFilename = "logtrack.sqlite";
-
-    private readonly SQLiteAsyncConnection _connection;
-    private readonly SemaphoreSlim _initializationLock = new(1, 1);
-    private bool _initialized;
-
-    public LocalDatabase()
+    private readonly SemaphoreSlim initialization = new(1, 1);
+    private SQLiteAsyncConnection? connection;
+    public string DatabasePath => databasePath;
+    public async Task<SQLiteAsyncConnection> GetConnectionAsync()
     {
-        var databasePath = Path.Combine(FileSystem.AppDataDirectory, DatabaseFilename);
-        _connection = new SQLiteAsyncConnection(
-            databasePath,
-            SQLiteOpenFlags.ReadWrite |
-            SQLiteOpenFlags.Create |
-            SQLiteOpenFlags.SharedCache);
-    }
-
-    public async Task<SQLiteAsyncConnection> GetConnectionAsync(CancellationToken cancellationToken = default)
-    {
-        await InitializeAsync(cancellationToken);
-        return _connection;
-    }
-
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
-    {
-        if (_initialized)
-            return;
-
-        await _initializationLock.WaitAsync(cancellationToken);
+        if (connection is not null) return connection;
+        await initialization.WaitAsync();
         try
         {
-            if (_initialized)
-                return;
-
-            await _connection.CreateTableAsync<LocalDatabaseMetadata>();
-            await _connection.CreateTableAsync<PendingSyncOperation>();
-
-            var metadata = await _connection.Table<LocalDatabaseMetadata>()
-                .Where(item => item.Id == 1)
-                .FirstOrDefaultAsync();
-
-            if (metadata is null)
-            {
-                await _connection.InsertAsync(new LocalDatabaseMetadata
-                {
-                    Id = 1,
-                    SchemaVersion = 1,
-                    CreatedAtUtc = DateTime.UtcNow
-                });
-            }
-
-            _initialized = true;
+            if (connection is not null) return connection;
+            SQLitePCL.Batteries_V2.Init();
+            Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+            var candidate = new SQLiteAsyncConnection(databasePath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
+            await candidate.ExecuteScalarAsync<string>("PRAGMA journal_mode=WAL");
+            await candidate.ExecuteScalarAsync<int>("PRAGMA busy_timeout=5000");
+            await candidate.CreateTableAsync<LocalDatabaseMetadata>();
+            await candidate.CreateTableAsync<LocalSnapshot>();
+            await candidate.CreateTableAsync<PendingSyncOperation>();
+            await candidate.InsertOrReplaceAsync(new LocalDatabaseMetadata { Key = "SchemaVersion", Value = "1" });
+            connection = candidate;
+            return connection;
         }
-        finally
+        finally { initialization.Release(); }
+    }
+    public async Task<string?> ReadAsync(string scope = "demo")
+    {
+        var db = await GetConnectionAsync();
+        return (await db.FindAsync<LocalSnapshot>(scope))?.Payload;
+    }
+    public async Task SaveAsync(string payload, PendingSyncOperation? operation = null, string scope = "demo")
+    {
+        try
         {
-            _initializationLock.Release();
+            var db = await GetConnectionAsync();
+            await db.RunInTransactionAsync(tx =>
+            {
+                tx.InsertOrReplace(new LocalSnapshot { Scope = scope, Payload = payload, UpdatedAtUtc = DateTime.UtcNow });
+                if (operation is not null)
+                {
+                    if (operation.Scope != scope) throw new InvalidOperationException("Escopo da operação não confere.");
+                    tx.Insert(operation); // Duplicate operation IDs roll back the snapshot as well.
+                }
+            });
         }
+        catch (SQLiteException ex) { throw new IOException("Não foi possível gravar no banco local.", ex); }
+    }
+    public async Task<List<PendingSyncOperation>> PendingAsync(string scope)
+    {
+        var db = await GetConnectionAsync();
+        return await db.Table<PendingSyncOperation>().Where(x => x.Scope == scope).OrderBy(x => x.CreatedAtUtc).ToListAsync();
     }
 }
+
