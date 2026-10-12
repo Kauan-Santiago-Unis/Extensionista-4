@@ -79,6 +79,20 @@ O Windows utiliza o navegador padrão e o fluxo OAuth2 com PKCE e retorno loopba
 
 O Client ID Desktop é público e fica no Mobile. O Client Secret não deve ser versionado; a solução definitiva deve fazer a troca do authorization code dentro da API, usando User Secrets ou variáveis de ambiente.
 
+Enquanto o fluxo de desktop ainda realiza a troca do authorization code no aplicativo Windows, configure o segredo apenas na máquina de desenvolvimento. No PowerShell, execute:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET",
+  "SEU_CLIENT_SECRET_DESKTOP",
+  "User"
+)
+```
+
+Feche e reabra o Visual Studio depois disso. O `GoogleAuthService` lê essa variável somente no Windows; ela não deve ser adicionada ao Git, ao `.csproj` ou ao `appsettings.json`.
+
+Para testar essa configuração, use o perfil `FullStack` com `Aplicativo.Api` em `IIS Express` e `Aplicativo.Mobile` em `Windows Machine`. Depois de selecionar **Continuar com Google**, o navegador deve concluir o OAuth2 e retornar ao LogTrack. Se aparecer `client_secret is missing`, reinicie o Visual Studio para que ele carregue a variável de ambiente.
+
 ### iOS e MacCatalyst
 
 Esses alvos ainda precisam de configuração específica de Client ID, Bundle ID e retorno OAuth antes de serem considerados prontos para teste.

@@ -1,11 +1,13 @@
 # Google SSO — OAuth2/OIDC
 
-O Android usa Credential Manager + Sign in with Google. iOS/Windows/MacCatalyst mantêm o fluxo OAuth2 com PKCE via `WebAuthenticator`. Em ambos os casos, a API valida o `id_token` e o `nonce` antes de emitir o JWT do aplicativo.
+O Android usa Credential Manager + Sign in with Google. O Windows usa o navegador com OAuth2/PKCE e retorno loopback em `127.0.0.1`. iOS e MacCatalyst mantêm o fluxo OAuth2 com PKCE via `WebAuthenticator`. Em todos os casos, a API valida o `id_token` e o `nonce` antes de emitir o JWT do aplicativo.
 
 ```text
 Android -> Credential Manager / Google Play Services
         <- id_token + nonce
-MAUI (demais plataformas) -> Google (navegador + PKCE)
+Windows -> Google (navegador + PKCE + loopback)
+        <- id_token + nonce
+iOS/MacCatalyst -> Google (WebAuthenticator + PKCE)
         <- id_token + nonce
 MAUI -> POST /api/auth/google
 API  -> valida assinatura, issuer, audience, email_verified e nonce
@@ -23,7 +25,21 @@ MAUI -> SecureStorage (sessão)
 6. Copie o Client ID Web para `GoogleServerClientId` em `src/Aplicativo.Mobile/GoogleAuthService.cs`.
 7. Coloque o Client ID Web em `Google:AllowedClientIds` na API. Adicione o Client ID iOS apenas se a plataforma correspondente também for usada.
 
-O aplicativo mobile não deve possuir `client_secret`. No Android, o Credential Manager não usa callback customizado nem `WebAuthenticator`.
+O aplicativo mobile não deve versionar `client_secret`. No Android, o Credential Manager não usa callback customizado nem `WebAuthenticator`.
+
+No Windows, durante o fluxo provisório de desktop, crie um OAuth Client ID do tipo **Desktop app**. O Client ID pode permanecer no código, mas o segredo é lido somente da variável de ambiente local `LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET`. Configure-a no PowerShell com:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET",
+  "SEU_CLIENT_SECRET_DESKTOP",
+  "User"
+)
+```
+
+Depois, reinicie o Visual Studio. Não coloque esse valor no `GoogleAuthService.cs` nem no repositório.
+
+Essa variável é necessária apenas para o login Windows. O Android continua usando o Credential Manager e não utiliza esse segredo.
 
 ## 2. Configurar a API sem commitar segredo
 
@@ -45,7 +61,24 @@ dotnet user-secrets list --project .\src\Aplicativo.Api\Aplicativo.Api.csproj
 dotnet build ..\Extensionista_4.slnx -f net10.0-android
 ```
 
-No Visual Studio, selecione o perfil de inicialização `FullStack` e execute. Ele inicia `Aplicativo.Api` pelo IIS Express e `Aplicativo.Mobile` no emulador Android.
+No Visual Studio, selecione o perfil de inicialização `FullStack` e execute. Para testar o Windows, configure `Aplicativo.Api` como `IIS Express` e `Aplicativo.Mobile` como `Windows Machine`. Para testar o Android, use o emulador Android.
+
+Antes do teste Windows, confirme que a variável existe sem exibir o segredo:
+
+```powershell
+$secret = [Environment]::GetEnvironmentVariable(
+  "LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET",
+  "User"
+)
+
+if ([string]::IsNullOrWhiteSpace($secret)) {
+  "Segredo não configurado"
+} else {
+  "Segredo configurado"
+}
+```
+
+Depois de alterar ou criar a variável, feche e reabra o Visual Studio. Clique em **Continuar com Google**, selecione a conta e confirme o retorno ao LogTrack. O erro `client_secret is missing` indica que o Visual Studio ainda não carregou a variável ou que ela está vazia.
 
 O Scalar fica disponível em `https://localhost:44380/scalar/v1`. No emulador, o MAUI acessa a mesma API por `https://10.0.2.2:44380`; essa URL já está configurada em `GoogleAuthService`. O código aceita o certificado local do IIS Express somente em builds `Debug` do Android.
 
@@ -94,5 +127,6 @@ O usuário criado neste primeiro passo é representado pelas claims do JWT. A pe
 - Tela de login do MAUI.
 - Tela de consentimento/seleção da conta Google.
 - Tela do app com o nome/e-mail retornado.
+- No Windows, variável `LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET` configurada somente localmente.
 - Fechar e abrir o app mostrando a sessão restaurada pelo `SecureStorage`.
 - Requisição autenticada para `/api/auth/me`.
