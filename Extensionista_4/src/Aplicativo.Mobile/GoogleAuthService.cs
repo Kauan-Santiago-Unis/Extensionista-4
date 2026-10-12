@@ -13,9 +13,14 @@ public sealed class GoogleAuthService
     private const string GoogleServerClientId = "296628721462-s3n3ntl7haeu01h53m5f0m2mn2bo3ajm.apps.googleusercontent.com";
     private const string GoogleDesktopClientId = "296628721462-mjapqe6j3mqgilhqg7hi77p4p3jk3eij.apps.googleusercontent.com";
 
-    // O Google exige este valor na troca manual do authorization code pelo token.
-    // Não compartilhe este segredo; mantenha-o apenas no ambiente local.
-    private const string GoogleDesktopClientSecret = "COLOQUE_AQUI_O_CLIENT_SECRET_DESKTOP";
+#if WINDOWS
+    // O segredo fica somente no ambiente local. Nunca o versionar no código.
+    private static string GoogleDesktopClientSecret =>
+        Environment.GetEnvironmentVariable("LOGTRACK_GOOGLE_DESKTOP_CLIENT_SECRET")
+        ?? string.Empty;
+#else
+    private const string GoogleDesktopClientSecret = "";
+#endif
     private const string ApiBaseUrl =
 #if ANDROID
         // O perfil FullStack usa o IIS Express em https://localhost:44380.
