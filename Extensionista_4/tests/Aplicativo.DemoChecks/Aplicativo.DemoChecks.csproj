@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Aplicativo.Core/Aplicativo.Core.csproj" />
+    <PackageReference Include="sqlite-net-base" Version="1.9.172" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <Compile Include="../../src/Aplicativo.Mobile/Data/Local/*.cs" Link="Local/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Aplicativo.Mobile/Services/Sync/*.cs" Link="Sync/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Aplicativo.Mobile/Services/DemoStore.cs" Link="DemoStore.cs" />
+    <Compile Include="../../src/Aplicativo.Mobile/Services/AccessPolicy.cs" Link="AccessPolicy.cs" />
+  </ItemGroup>
+</Project>

@@ -1,16 +1,16 @@
 using SQLite;
-
 namespace Aplicativo.Mobile.Data.Local;
 
-[Table("__local_database_metadata")]
+[Table("LocalDatabaseMetadata")]
 public sealed class LocalDatabaseMetadata
 {
-    [PrimaryKey]
-    public int Id { get; set; }
-
-    public int SchemaVersion { get; set; }
-
-    public DateTime CreatedAtUtc { get; set; }
-
-    public DateTime? LastSynchronizationAtUtc { get; set; }
+    [PrimaryKey] public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+}
+[Table("LocalSnapshots")]
+public sealed class LocalSnapshot
+{
+    [PrimaryKey] public string Scope { get; set; } = "demo";
+    public string Payload { get; set; } = "";
+    public DateTime UpdatedAtUtc { get; set; }
 }

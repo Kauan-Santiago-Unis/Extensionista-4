@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 
 using Aplicativo.Mobile.Data.Local;
 
@@ -18,7 +18,7 @@ namespace Aplicativo.Mobile
                 });
 
             builder.Services.AddSingleton<GoogleAuthService>();
-            builder.Services.AddSingleton<LocalDatabase>();
+            builder.Services.AddSingleton(_ => new LocalDatabase(Path.Combine(FileSystem.AppDataDirectory, "logtrack.db3")));
 
 #if DEBUG
     		builder.Logging.AddDebug();
