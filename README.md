@@ -69,6 +69,8 @@ SecureStorage do dispositivo
 
 O Google confirma a identidade. A API é responsável por autorização, perfis e permissões do LogTrack.
 
+O modelo de autorização persistido é composto por `Usuario`, `GrupoUsuario`, `Modulo` e `GrupoUsuarioModulo`. `StatusUsuario` representa somente a situação cadastral (`AguardandoAprovacao`, `Ativo` ou `Inativo`); ele não representa grupo ou permissão.
+
 ### Android
 
 O Android utiliza o Credential Manager com o Client ID Web como `serverClientId`. O Client ID Android deve estar associado ao pacote e ao SHA-1 do certificado de assinatura utilizado.
@@ -162,9 +164,33 @@ dotnet user-secrets set `
   "Jwt:Key" `
   "SUA_CHAVE_LOCAL_COM_PELO_MENOS_32_CARACTERES" `
   --project ".\src\Aplicativo.Api\Aplicativo.Api.csproj"
+
+dotnet user-secrets set `
+  "Bootstrap:AdminEmail" `
+  "seu-email-google-de-administrador" `
+  --project ".\src\Aplicativo.Api\Aplicativo.Api.csproj"
+
+dotnet user-secrets set `
+  "ConnectionStrings:DefaultConnection" `
+  "SUA_CONNECTION_STRING_DO_SQL_SERVER" `
+  --project ".\src\Aplicativo.Api\Aplicativo.Api.csproj"
 ```
 
 Não versionar Client Secrets, chaves JWT, senhas ou connection strings reais.
+
+### Banco e autorização
+
+A API utiliza Entity Framework Core com SQL Server. A primeira autenticação executa a migration pendente e cria o grupo `Administrador` e o catálogo inicial de módulos. O usuário cujo e-mail estiver em `Bootstrap:AdminEmail` será aprovado somente quando estiver em `AguardandoAprovacao` e ainda não possuir grupo.
+
+Para aplicar a migration manualmente:
+
+```powershell
+dotnet ef database update `
+  --project ".\src\Aplicativo.Api\Aplicativo.Api.csproj" `
+  --startup-project ".\src\Aplicativo.Api\Aplicativo.Api.csproj"
+```
+
+O endpoint `GET /api/auth/me` retorna o status atual, o grupo atual e os módulos ativos. A API também possui a policy reutilizável `[RequireModule("FROTA")]`; a autorização consulta o banco, portanto alterações de grupo/módulo não ficam presas ao conteúdo de um JWT antigo.
 
 ## Executando no Visual Studio
 
@@ -192,6 +218,8 @@ https://localhost:7240/scalar/v1
 - Login Google funciona no Android.
 - Login Google funciona no Windows.
 - O JWT é salvo no `SecureStorage`.
+- A migration inicial de autorização é aplicada no SQL Server local.
+- `/api/auth/me` retorna status, grupo e módulos atuais.
 - O banco SQLite é criado na primeira utilização do `LocalDatabase`.
 - Dados locais continuam acessíveis sem conexão.
 
@@ -202,10 +230,12 @@ https://localhost:7240/scalar/v1
 - API emitindo JWT próprio do LogTrack.
 - Scalar configurado para documentação e testes.
 - Infraestrutura inicial de SQLite e fila de sincronização criada.
-- Persistência de usuários, RBAC completo, entidades de negócio, sincronização e migrations do SQL Server ainda devem ser implementados conforme as funcionalidades forem desenvolvidas.
+- Persistência de usuários e infraestrutura inicial de RBAC implementadas com SQL Server e EF Core.
+- Entidades de negócio, sincronização completa e administração visual no Mobile ainda devem ser implementadas conforme as funcionalidades forem desenvolvidas.
 
 ## Documentos relacionados
 
 - [Regras de arquitetura para agentes e desenvolvedores](AGENTS.md)
 - [Documentação da autenticação](Extensionista_4/AUTHENTICATION.md)
+- [Documentação da autorização e RBAC](Extensionista_4/AUTHORIZATION.md)
 - [Solução Visual Studio](Extensionista_4/Extensionista_4.slnx)

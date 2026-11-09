@@ -77,6 +77,34 @@ public sealed class GoogleAuthService
         return session;
     }
 
+    public async Task<AppSession?> RefreshSessionAsync(CancellationToken cancellationToken = default)
+    {
+        var session = await GetStoredSessionAsync();
+        if (session is null)
+            return null;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBaseUrl}/api/auth/me");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", session.AccessToken);
+#if ANDROID && DEBUG
+        request.Headers.Host = "localhost:44380";
+#endif
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            await SignOutAsync();
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var user = await response.Content.ReadFromJsonAsync<AppUser>(cancellationToken);
+        if (user is null)
+            throw new InvalidOperationException("A API retornou uma sessão inválida.");
+
+        var refreshed = session with { User = user };
+        await SecureStorage.Default.SetAsync(SessionKey, JsonSerializer.Serialize(refreshed));
+        return refreshed;
+    }
+
     public Task SignOutAsync() { SecureStorage.Default.Remove(SessionKey); return Task.CompletedTask; }
 
     private static async Task<GoogleIdTokenResult> GetGoogleIdTokenAsync(CancellationToken cancellationToken)
@@ -274,4 +302,17 @@ public sealed record AppSession([property: JsonPropertyName("accessToken")] stri
     public string Email => User.Email;
     public string Name => User.Name;
 }
-public sealed record AppUser([property: JsonPropertyName("id")] string Id, [property: JsonPropertyName("email")] string Email, [property: JsonPropertyName("name")] string Name, [property: JsonPropertyName("picture")] string Picture);
+public sealed record AppUser(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("email")] string Email,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("picture")] string Picture,
+    [property: JsonPropertyName("status")] string? Status,
+    [property: JsonPropertyName("group")] AppGroup? Group,
+    [property: JsonPropertyName("modules")] AppModule[]? Modules)
+{
+    public string EffectiveStatus => Status ?? "AguardandoAprovacao";
+    public IReadOnlyList<AppModule> EffectiveModules => Modules ?? [];
+}
+public sealed record AppGroup([property: JsonPropertyName("id")] int Id, [property: JsonPropertyName("name")] string Name);
+public sealed record AppModule([property: JsonPropertyName("code")] string Code, [property: JsonPropertyName("name")] string Name);

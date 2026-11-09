@@ -12,7 +12,7 @@ public partial class FleetPage : ContentPage
     private readonly GoogleAuthService authService;
     private AppSession? session = null;
     private bool signingIn;
-    private string DisplayName => role == "Operador/Motorista" ? "Motorista" : store.Data.UserName;
+    private string DisplayName => session?.Name ?? (role == "Operador/Motorista" ? "Motorista" : store.Data.UserName);
     private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
     private bool loaded;
     private int tab;
@@ -37,9 +37,9 @@ public partial class FleetPage : ContentPage
             await DisplayAlertAsync("Banco local", "Não foi possível abrir o banco. Seus dados não foram substituídos. Libere espaço ou tente novamente.", "OK");
             return;
         }
-        try { session = await authService.GetStoredSessionAsync(); }
+        try { session = await authService.RefreshSessionAsync(); }
         catch (Exception) { await DisplayAlertAsync("Sessão", "Não foi possível restaurar sua sessão. Entre novamente.", "Entendi"); }
-        if (session is null) Login(); else PendingApproval();
+        if (session is null) Login(); else { role = session.User.Group?.Name ?? string.Empty; Render(); }
         if (store.LoadWarning is not null) await DisplayAlertAsync("Dados locais", store.LoadWarning, "Entendi");
     }
 
@@ -51,7 +51,8 @@ public partial class FleetPage : ContentPage
         try
         {
             session = await authService.SignInAsync();
-            PendingApproval();
+            role = session.User.Group?.Name ?? string.Empty;
+            Render();
         }
         catch (OperationCanceledException)
         { await DisplayAlertAsync("Login cancelado", "Você pode tentar novamente quando quiser.", "Entendi"); }
@@ -71,6 +72,7 @@ public partial class FleetPage : ContentPage
         {
             await authService.SignOutAsync();
             session = null;
+            role = "Administrador";
             tab = 0;
             Login();
         }
@@ -104,13 +106,13 @@ public partial class FleetPage : ContentPage
 
     private void Render()
     {
-        if (session is not null) { PendingApproval(); return; }
+        if (session is not null && session.User.EffectiveStatus != "Ativo") { PendingApproval(); return; }
         if (!TabAllowed(tab)) tab = role == "Operador/Motorista" ? 6 : 5;
         Root.Clear(); Root.RowDefinitions.Clear();
         Root.RowDefinitions.Add(new RowDefinition(GridLength.Star));
         Root.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         body = new VerticalStackLayout { Padding = new Thickness(20, 24, 20, 24), Spacing = 18, MaximumWidthRequest = 760, HorizontalOptions = LayoutOptions.Fill };
-        body.Add(Text($"DEMONSTRAÇÃO LOCAL • {role}", 10, Muted, true));
+        body.Add(Text(session is null ? $"DEMONSTRAÇÃO LOCAL • {role}" : $"USUÁRIO AUTENTICADO • {session.User.Group?.Name ?? "Sem grupo"}", 10, Muted, true));
         switch (tab) { case 0: Home(); break; case 1: Fleet(); break; case 2: Maintenances(); break; case 3: Fuel(); break; case 4: Finance(); break; case 5: Profile(); break; case 6: Trips(); break; case 7: Routes(); break; case 8: Categories(); break; case 9: Payments(); break; case 10: Debts(); break; case 11: Users(); break; }
         Root.Add(new ScrollView { Content = body }, 0, 0);
         Root.Add(NavigationBar(), 0, 1);

@@ -23,7 +23,7 @@ MAUI -> SecureStorage (sessão)
 4. Crie um OAuth Client ID do tipo Android, associado ao `ApplicationId` e ao SHA-1 da assinatura debug.
 5. Para iOS/MacCatalyst, crie também um Client ID da plataforma, se for testar essas plataformas.
 6. Copie o Client ID Web para `GoogleServerClientId` em `src/Aplicativo.Mobile/GoogleAuthService.cs`.
-7. Coloque o Client ID Web em `Google:AllowedClientIds` na API. Adicione o Client ID iOS apenas se a plataforma correspondente também for usada.
+7. Coloque o Client ID Web e o Client ID Desktop em `Google:AllowedClientIds` na API. Adicione o Client ID iOS apenas se a plataforma correspondente também for usada.
 
 O aplicativo mobile não deve versionar `client_secret`. No Android, o Credential Manager não usa callback customizado nem `WebAuthenticator`.
 
@@ -48,8 +48,11 @@ Na pasta `src/Aplicativo.Api`, use User Secrets durante o desenvolvimento:
 ```powershell
 dotnet user-secrets init
 dotnet user-secrets set "Google:AllowedClientIds:0" "SEU_CLIENT_ID_WEB.apps.googleusercontent.com"
-dotnet user-secrets set "Google:AllowedClientIds:1" "SEU_CLIENT_ID_IOS.apps.googleusercontent.com"
+dotnet user-secrets set "Google:AllowedClientIds:1" "SEU_CLIENT_ID_DESKTOP.apps.googleusercontent.com"
+dotnet user-secrets set "Google:AllowedClientIds:2" "SEU_CLIENT_ID_IOS.apps.googleusercontent.com"
 dotnet user-secrets set "Jwt:Key" "uma-chave-local-com-no-minimo-32-caracteres-e-fora-do-git"
+dotnet user-secrets set "Bootstrap:AdminEmail" "seu-email-google-de-administrador"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "SUA_CONNECTION_STRING_DO_SQL_SERVER"
 ```
 
 O `appsettings.json` contém apenas placeholders para documentar a estrutura. Em produção, injete a chave por Secret Manager, variável de ambiente ou serviço de secrets.
@@ -104,10 +107,13 @@ Resposta:
   "accessToken": "JWT_DA_APLICACAO",
   "expiresAt": "2026-08-24T12:00:00Z",
   "user": {
-    "id": "GOOGLE_SUB",
+    "id": "USUARIO_GUID",
     "email": "usuario@example.com",
     "name": "Nome do usuário",
-    "picture": "https://..."
+    "picture": "https://...",
+    "status": "AguardandoAprovacao",
+    "group": null,
+    "modules": []
   }
 }
 ```
@@ -120,7 +126,9 @@ Resposta:
 Authorization: Bearer JWT_DA_APLICACAO
 ```
 
-O usuário criado neste primeiro passo é representado pelas claims do JWT. A persistência em uma tabela `Usuarios` deve ser adicionada junto com o banco/EF Core.
+O endpoint consulta o usuário real no SQL Server e retorna `status`, `group` e `modules`. O usuário recém-criado fica como `AguardandoAprovacao`, exceto o e-mail configurado em `Bootstrap:AdminEmail`, que pode receber o grupo administrativo no primeiro login.
+
+Usuários `Inativo` recebem HTTP 403 e não recebem um novo JWT. A aprovação e a atribuição de grupo são operações separadas e ficam disponíveis para a administração pela API.
 
 ## 5. Checklist de evidência para a apresentação
 

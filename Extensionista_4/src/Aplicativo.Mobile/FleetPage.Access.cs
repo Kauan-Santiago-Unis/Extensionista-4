@@ -9,14 +9,39 @@ public partial class FleetPage
 {
     private string role = "Administrador";
     private bool busy;
-    private string Actor => role == "Operador/Motorista" ? "driver" : "admin";
-    private bool Can(string action) => session is null && AccessPolicy.Can(role, action);
-    private bool TabAllowed(int index) => Can(index switch { 0 => role == "Gestor de Frota" ? "logistics" : "finance", 1 => "fleet", 2 or 3 or 7 => "manageFleet", 4 or 8 or 9 or 10 => "finance", 6 => "trips", 11 => "admin", _ => "profile" });
+    private string Actor => session?.User.Id ?? (role == "Operador/Motorista" ? "driver" : "admin");
+    private bool HasModule(string code) => session?.User.EffectiveModules.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)) == true;
+    private bool Can(string action) => session is not null
+        ? session.User.EffectiveStatus == "Ativo" && action switch
+        {
+            "dashboard" => HasModule("DASHBOARD"),
+            "finance" => HasModule("FINANCEIRO"),
+            "fleet" or "manageFleet" => HasModule("FROTA"),
+            "trips" => HasModule("VIAGENS"),
+            "logistics" => HasModule("FROTA") || HasModule("VIAGENS"),
+            "admin" => HasModule("ADMINISTRACAO"),
+            "profile" => true,
+            _ => false
+        }
+        : AccessPolicy.Can(role, action);
+    private bool TabAllowed(int index) => session is not null
+        ? index switch
+        {
+            0 => Can("dashboard") || Can("finance") || Can("logistics"),
+            1 => Can("fleet"),
+            2 or 3 or 7 => Can("manageFleet"),
+            4 or 8 or 9 or 10 => Can("finance"),
+            6 => Can("trips"),
+            11 => Can("admin"),
+            _ => Can("profile")
+        }
+        : Can(index switch { 0 => role == "Gestor de Frota" ? "logistics" : "finance", 1 => "fleet", 2 or 3 or 7 => "manageFleet", 4 or 8 or 9 or 10 => "finance", 6 => "trips", 11 => "admin", _ => "profile" });
     private bool FormAllowed(string kind) => Can(kind switch { "transaction" or "category" or "payment" or "debt" => "finance", "vehicle" or "maintenance" or "fuel" or "route" => "manageFleet", "trip" => "trips", "company" => "admin", _ => "profile" });
     private void PendingApproval()
     {
         Root.Clear(); Root.RowDefinitions.Clear();
-        var panel = Stack(Text("Aguardando aprovação", 25, Blue, true), Text(session?.Name ?? "Conta Google", 18), Text("Sua identidade foi autenticada. A API atual ainda não informa aprovação e perfil de acesso. Os módulos de gestão permanecem bloqueados até essa integração.", 15, Muted), Button("Sair", async () => await SignOutAsync()));
+        var status = session?.User.EffectiveStatus == "Inativo" ? "Sua conta está inativa." : "Sua identidade foi autenticada, mas a conta ainda aguarda aprovação e atribuição de grupo.";
+        var panel = Stack(Text(session?.User.EffectiveStatus == "Inativo" ? "Acesso bloqueado" : "Aguardando aprovação", 25, Blue, true), Text(session?.Name ?? "Conta Google", 18), Text(status, 15, Muted), Button("Sair", async () => await SignOutAsync()));
         panel.Padding = 28; panel.MaximumWidthRequest = 500; Root.Add(new ScrollView { Content = panel });
     }
     private void Go(int index) { if (!TabAllowed(index)) { _ = DisplayAlertAsync("Acesso negado", "Este perfil não pode acessar este módulo.", "OK"); return; } tab = index; Render(); }
@@ -29,8 +54,8 @@ public partial class FleetPage
     }
     private void Profile()
     {
-        Header("Perfil"); body.Add(Card(Stack(Text(DisplayName, 19, bold: true), Text(role, 14, Blue))));
-        if (Can("admin")) { body.Add(Button("Dados da empresa", () => OpenForm("company"), true)); body.Add(Button("Usuários da demonstração", () => Go(11), true)); }
+        Header("Perfil"); body.Add(Card(Stack(Text(DisplayName, 19, bold: true), Text(session?.User.Group?.Name ?? role, 14, Blue), Text(session?.User.EffectiveStatus ?? "Demonstração local", 13, Muted))));
+        if (Can("admin") && session is null) { body.Add(Button("Dados da empresa", () => OpenForm("company"), true)); body.Add(Button("Usuários da demonstração", () => Go(11), true)); }
         if (role != "Operador/Motorista") body.Add(Button("Nome da demonstração", () => OpenForm("profile"), true));
         body.Add(Card(Stack(Text("Armazenamento local", 16, bold: true), Text($"{store.Data.LocalOperations.Count} operação(ões) registrada(s) neste dispositivo. Nenhum registro foi enviado ao servidor. Sincronização automática e aprovação real dependem da API.", 12, Muted))));
         body.Add(Button("Sair", async () => await SignOutAsync(), true));

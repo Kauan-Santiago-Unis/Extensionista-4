@@ -3,6 +3,7 @@
     <File Path="../AGENTS.md" />
     <File Path="../README.md" />
     <File Path="../.gitignore" />
+    <File Path="AUTHORIZATION.md" />
   </Folder>
   <Project Path="src/Aplicativo.Api/Aplicativo.Api.csproj" />
   <Project Path="src/Aplicativo.Core/Aplicativo.Core.csproj" />

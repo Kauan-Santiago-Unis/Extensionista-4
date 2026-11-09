@@ -1,5 +1,5 @@
 using Aplicativo.Api.Options;
-using Google.Apis.Auth;
+using Aplicativo.Core.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -12,17 +12,25 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options)
 {
     private readonly JwtOptions _options = options.Value;
 
-    public (string Token, DateTime ExpiresAt) Create(GoogleJsonWebSignature.Payload googleUser)
+    public (string Token, DateTime ExpiresAt) Create(Usuario user)
     {
         var expiresAt = DateTime.UtcNow.AddMinutes(_options.ExpirationMinutes);
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, googleUser.Subject),
-            new Claim(JwtRegisteredClaimNames.Email, googleUser.Email),
-            new Claim(ClaimTypes.Name, googleUser.Name ?? googleUser.Email),
-            new Claim("picture", googleUser.Picture ?? string.Empty),
-            new Claim("provider", "google")
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new(ClaimTypes.Name, user.Nome),
+            new("picture", user.FotoUrl ?? string.Empty),
+            new("provider", "google"),
+            new("status", user.Status.ToString()),
+            new("google_sub", user.GoogleSubject)
         };
+
+        if (user.GrupoUsuario is not null)
+        {
+            claims.Add(new Claim("group_id", user.GrupoUsuario.Id.ToString()));
+            claims.Add(new Claim("group", user.GrupoUsuario.Nome));
+        }
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key)),

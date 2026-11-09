@@ -195,14 +195,17 @@ Aplicativo.Mobile
 
 ## 9. RBAC
 
-Os perfis e permissões são controlados pelo LogTrack:
+O Google define somente a identidade externa. A autorização persistida do LogTrack utiliza:
 
-- Administrador
-- Gestor de Frota
-- Financeiro
-- Operador/Motorista
+- `Usuario`, com no máximo um `GrupoUsuario` opcional;
+- `StatusUsuario`, independente de grupo e permissão;
+- `GrupoUsuario`, entidade cadastrável e editável;
+- `Modulo`, identificado por `Codigo` único;
+- `GrupoUsuarioModulo`, associação N:N com chave composta.
 
-O Google não define o perfil do usuário. No primeiro login, o usuário pode permanecer como `AguardandoAprovacao` até a aprovação e definição de perfil por um Administrador.
+`StatusUsuario` possui apenas `AguardandoAprovacao`, `Ativo` e `Inativo`. Um usuário recém-autenticado pode ficar sem grupo enquanto aguarda aprovação. Usuários inativos não recebem novo JWT.
+
+Os nomes iniciais de grupos, como `Administrador`, `Gestor de Frota`, `Financeiro` e `Operador/Motorista`, são dados de configuração, não valores de enum nem uma lista fechada. Não criar autorização baseada exclusivamente no nome do grupo; utilizar o código do módulo.
 
 Toda autorização deve ser validada no backend. Ocultar funcionalidades no Mobile não substitui a autorização na API.
 
