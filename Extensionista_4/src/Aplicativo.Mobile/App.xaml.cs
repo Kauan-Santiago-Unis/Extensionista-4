@@ -11,7 +11,9 @@ namespace Aplicativo.Mobile
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new AppShell());
+            var authService = IPlatformApplication.Current?.Services.GetService<GoogleAuthService>()
+                ?? new GoogleAuthService();
+            return new Window(new AppShell(authService));
         }
     }
 }

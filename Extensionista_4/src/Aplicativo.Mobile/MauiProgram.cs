@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
+
+using Aplicativo.Mobile.Data.Local;
 
 namespace Aplicativo.Mobile
 {
@@ -14,6 +16,9 @@ namespace Aplicativo.Mobile
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
+
+            builder.Services.AddSingleton<GoogleAuthService>();
+            builder.Services.AddSingleton(_ => new LocalDatabase(Path.Combine(FileSystem.AppDataDirectory, "logtrack.db3")));
 
 #if DEBUG
     		builder.Logging.AddDebug();
