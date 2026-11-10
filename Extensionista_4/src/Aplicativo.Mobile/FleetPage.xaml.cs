@@ -55,11 +55,20 @@ public partial class FleetPage : ContentPage
         }
         catch (OperationCanceledException)
         { await DisplayAlertAsync("Login cancelado", "Você pode tentar novamente quando quiser.", "Entendi"); }
-        catch (HttpRequestException)
-        { await DisplayAlertAsync("Falha no login", "Não foi possível conectar ao Google ou à API. Verifique sua conexão e se o perfil FullStack está em execução.", "Entendi"); }
-        catch (Exception)
-        { await DisplayAlertAsync("Falha no login", "Não foi possível concluir o login. Confira a configuração Google e a execução da API.", "Entendi"); }
+        catch (HttpRequestException ex)
+        { await DisplayAlertAsync("Falha no login", LoginErrorMessage(ex), "Entendi"); }
+        catch (Exception ex)
+        { await DisplayAlertAsync("Falha no login", LoginErrorMessage(ex), "Entendi"); }
         finally { signingIn = false; Root.IsEnabled = true; }
+    }
+
+    private static string LoginErrorMessage(Exception exception)
+    {
+        var messages = new List<string>();
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+            messages.Add($"{current.GetType().Name}: {current.Message}");
+
+        return string.Join(Environment.NewLine + Environment.NewLine + "Causa interna: ", messages);
     }
 
     private async Task SignOutAsync()
